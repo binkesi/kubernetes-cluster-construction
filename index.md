@@ -10,3 +10,13 @@ For me the best practise to learn kubernetes is to build a HA kubernetes cluster
 
 We need a virtualization platform to set up seven VMs. Three master nodes, three worker nodes and one Load Balance node with
 HAproxy and Keepalived installed.
+
+VMs plan:
+
+| IP address | hostname | VM resource | VM role | software installed | OS installed |
+| ---- | ---- | ---- | ---- | ---- | ---- |
+
+### Step 1. Prepare base VM
+
+1. Set up a base Centos8 VM for clone which can access Internet.
+2. 
