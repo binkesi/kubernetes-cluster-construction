@@ -15,6 +15,8 @@ VMs plan:
 
 | IP address | hostname | VM resource | VM role | software installed | OS installed |
 | ---- | ---- | ---- | ---- | ---- | ---- |
+| 33.193.255.121 | master-lb | 2 core, 8G | Load Balance | HAproxy, Keepalived | Centos8 |
+
 
 ### Step 1. Prepare base VM
 
