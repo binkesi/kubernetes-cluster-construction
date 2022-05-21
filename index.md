@@ -145,7 +145,6 @@ echo "DefaultLimitNPROC=1024000" >> /etc/systemd/system.conf
 - Optimize kernel for k8s
 ```shell
 vi /etc/sysctl.d/k8s.conf
-
 net.ipv4.ip_forward = 1
 net.bridge.bridge-nf-call-iptables = 1
 net.bridge.bridge-nf-call-ip6tables = 1
@@ -170,7 +169,6 @@ net.ipv4.tcp_max_syn_backlog = 16384
 net.ipv4.tcp_timestamps = 0
 net.core.somaxconn = 16384
 EOF
-
 sysctl --system
 yum install wget jq psmisc vim net-tools telnet yum-utils device-mapper-persistent-data lvm2 git lrzsz -y
 ```
@@ -194,7 +192,6 @@ modprobe -- nf_conntrack
 - Create ipvs configure file
 ```shell
 vi /etc/modules-load.d/ipvs.conf
-
 ip_vs 
 ip_vs_lc 
 ip_vs_wlc 
