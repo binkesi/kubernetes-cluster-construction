@@ -48,6 +48,7 @@ Network plan:
 
 1. Set up a base Centos8 VM for clone which can access Internet. (deploy ova template on Vcenter)
 2. Do some system service configuration
+
 - Disable firewall and selinux
 ```shell
 systemctl stop firewalld
