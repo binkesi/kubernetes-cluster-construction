@@ -1,6 +1,6 @@
 ## Build High available Kubernetes cluster
 
-Record process of building high avilable k8s cluster.
+Record process of building high avilable k8s cluster.  
 Also the problems I met and how to resolve the problems.
 
 ### Overview
@@ -116,12 +116,12 @@ grub2-mkconfig -o /boot/grub2/grub.cfg
 reboot
 ```
 
-At boot time a window **Shim UEFI key management** gets displayed **for 10 seconds only** (unless step 2. has been followed)
-Hit a key to enter the **Perform MOK management** menu
-Choose **Enroll MOK**
-Choose **Continue**
-Choose **Yes** in **Enroll the key** menu
-Type the password used while executing the `mokutil --import-hash` command
+At boot time a window **Shim UEFI key management** gets displayed **for 10 seconds only** (unless step 2. has been followed)  
+Hit a key to enter the **Perform MOK management** menu  
+Choose **Enroll MOK**  
+Choose **Continue**  
+Choose **Yes** in **Enroll the key** menu  
+Type the password used while executing the `mokutil --import-hash` command  
 Choose **Reboot** to reboot
 
 - Remove old kernel
