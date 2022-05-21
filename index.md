@@ -90,3 +90,100 @@ yum install chrony -y
 systemctl enable chronyd
 systemctl start chronyd
 ```
+
+3. Upgrade linux kernel
+
+- Import elrepo yum resource
+```shell
+rpm --import https://www.elrepo.org/RPM-GPG-KEY-elrepo.org
+yum install https://www.elrepo.org/elrepo-release-8.el8.elrepo.noarch.rpm -y
+```
+
+- Install new version kernel
+```shell
+yum --disablerepo="*" --enablerepo="elrepo-kernel" list available
+yum --enablerepo=elrepo-kernel install kernel-ml -y
+```
+
+- Configure shim allow and grub
+```shell
+yum install pesign -y
+pesign -P -h -i /boot/vmlinuz-<version>
+mokutil --import-hash <hash value returned from pesign>
+input password: somepass
+input password again: somepass
+grub2-mkconfig -o /boot/grub2/grub.cfg
+reboot
+```
+
+At boot time a window **Shim UEFI key management** gets displayed **for 10 seconds only** (unless step 2. has been followed)
+Hit a key to enter the **Perform MOK management** menu
+Choose **Enroll MOK**
+Choose **Continue**
+Choose **Yes** in **Enroll the key** menu
+Type the password used while executing the `mokutil --import-hash` command
+Choose **Reboot** to reboot
+
+- Remove old kernel
+```shell
+rpm -qa | grep kernel
+yum remove -y kernel-core-4.18.0 kernel-devel-4.18.0 kernel-tools-libs-4.18.0 kernel-headers-4.18.0
+```
+
+- Optimize kernel parameter
+```shell
+echo "* soft nofile 655360" >> /etc/security/limits.conf
+echo "* hard nofile 655360" >> /etc/security/limits.conf
+echo "* soft nproc 655360" >> /etc/security/limits.conf
+echo "* hard nproc 655360" >> /etc/security/limits.conf
+echo "* soft memlock unlimited" >> /etc/security/limits.conf
+echo "* hard memlock unlimited" >> /etc/security/limits.conf
+echo "DefaultLimitNOFILE=1024000" >> /etc/systemd/system.conf
+echo "DefaultLimitNPROC=1024000" >> /etc/systemd/system.conf
+```
+
+4. Load ipvs
+
+- Install required tools
+```shell
+yum install ipvsadm ipset sysstat conntrack libseccomp -y
+```
+
+- Configure ipvs module
+```shell
+modprobe -- ip_vs 
+modprobe -- ip_vs_rr 
+modprobe -- ip_vs_wrr 
+modprobe -- ip_vs_sh 
+modprobe -- nf_conntrack 
+```
+
+- Create ipvs configure file
+```shell
+vi /etc/modules-load.d/ipvs.conf
+ip_vs 
+ip_vs_lc 
+ip_vs_wlc 
+ip_vs_rr 
+ip_vs_wrr 
+ip_vs_lblc 
+ip_vs_lblcr 
+ip_vs_dh 
+ip_vs_sh 
+ip_vs_fo 
+ip_vs_nq 
+ip_vs_sed 
+ip_vs_ftp 
+ip_vs_sh 
+nf_conntrack 
+ip_tables 
+ip_set 
+xt_set 
+ipt_set 
+ipt_rpfilter 
+ipt_REJECT 
+ipip
+EOF
+```
+
+### Step 2. Deploy master nodes
