@@ -12,7 +12,7 @@ For me the best practise to learn kubernetes is to build a HA kubernetes cluster
 We need a virtualization platform to set up seven VMs. Three master nodes, three worker nodes and one Load Balance node with
 HAproxy and Keepalived installed.
 
-VMs plan:
+- VMs plan:
 
 | IP address | Hostname | VM resource | VM role | Software installed | OS installed |
 | :---- | :---- | :---- | :---- | :---- | :---- |
@@ -24,7 +24,7 @@ VMs plan:
 | 33.193.255.126 | worker-02 | 2 core, 8G | Worker | kubelet, kube-proxy, core-dns | Centos8 |
 | 33.193.255.127 | worker-03 | 2 core, 8G | Worker | kubelet, kube-proxy, core-dns | Centos8 |
 
-Software plan:
+- Software plan:
 
 | Software | Version |
 | :---- | :---- |
@@ -37,7 +37,7 @@ Software plan:
 | haproxy | v1.5.18 |
 | keepalived | v1.3.5 |
 
-Network plan:
+- Network plan:
 
 | Network | Allocation |
 | :---- | :---- |
