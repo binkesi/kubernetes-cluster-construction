@@ -116,7 +116,7 @@ grub2-mkconfig -o /boot/grub2/grub.cfg
 reboot
 ```
 
-At boot time a window **Shim UEFI key management** gets displayed **for 10 seconds only** (unless step 2. has been followed)  
+At boot time a window **Shim UEFI key management** gets displayed **for 10 seconds only**   
 Hit a key to enter the **Perform MOK management** menu  
 Choose **Enroll MOK**  
 Choose **Continue**  
