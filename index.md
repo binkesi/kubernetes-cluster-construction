@@ -49,20 +49,22 @@ Network plan:
 1. Set up a base Centos8 VM for clone which can access Internet. (deploy ova template on Vcenter)
 2. Do some system service configuration
 - Disable firewall and selinux
-```
+```shell
 systemctl stop firewalld
 systemctl disable firewalld
 sed -i 's/enforcing/disabled/' /etc/selinux/config
 setenforce 0 
+```
 
 - Close swap off
-```
+```shell
 swapoff -a
 vi /etc/fstab
 #/dev/mapper/centos-swap swap                    swap    defaults        0 0
+```
 
 - Add hosts information
-```
+```shell
 vi /etc/hosts
 33.193.255.121 master-lb
 33.193.255.122 master-01
@@ -71,16 +73,19 @@ vi /etc/hosts
 33.193.255.125 worker-01
 33.193.255.126 worker-02
 33.193.255.127 worker-03
+```
 
 - Make Centos8 yum avaliable
-```
+```shell
 wget 'http://mirror.centos.org/centos/8-stream/BaseOS/x86_64/os/Packages/centos-gpg-keys-8-3.el8.noarch.rpm'
 sudo rpm -i 'centos-gpg-keys-8-3.el8.noarch.rpm'
 dnf --disablerepo '*' --enablerepo=extras swap centos-linux-repos centos-stream-repos
 sudo dnf distro-sync
+```
 
 - Sync system time
-```
+```shell
 yum install chrony -y
 systemctl enable chronyd
 systemctl start chronyd
+```
