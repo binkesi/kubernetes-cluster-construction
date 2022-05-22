@@ -65,17 +65,16 @@ vi /etc/fstab
 ```
 
 - Add hosts information
-```shell
-vi /etc/hosts
-&nbsp;
-33.193.255.121 master-lb
-33.193.255.122 master-01
-33.193.255.123 master-02
-33.193.255.124 master-03
-33.193.255.125 worker-01
-33.193.255.126 worker-02
-33.193.255.127 worker-03
-```
+    vi /etc/hosts
+
+    33.193.255.121 master-lb
+    33.193.255.122 master-01
+    33.193.255.123 master-02
+    33.193.255.124 master-03
+    33.193.255.125 worker-01
+    33.193.255.126 worker-02
+    33.193.255.127 worker-03
+
 
 - Make Centos8 yum avaliable
 ```shell
