@@ -870,23 +870,23 @@ HAproxy and Keepalived installed.
         {
             "CN": "system:kube-scheduler",
             "hosts": [
-            "127.0.0.1",
-            "33.193.255.122",
-            "33.193.255.123",
-            "33.193.255.124"
+                "127.0.0.1",
+                "33.193.255.122",
+                "33.193.255.123",
+                "33.193.255.124"
             ],
             "key": {
                 "algo": "rsa",
                 "size": 2048
             },
             "names": [
-            {
-                "C": "CN",
-                "ST": "Shanghai",
-                "L": "pudong",
-                "O": "system:kube-scheduler",
-                "OU": "system"
-            }
+                {
+                    "C": "CN",
+                    "ST": "Shanghai",
+                    "L": "pudong",
+                    "O": "system:kube-scheduler",
+                    "OU": "system"
+                }
             ]
         }
         EOF 
