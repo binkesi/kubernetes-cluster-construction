@@ -65,17 +65,16 @@ vi /etc/fstab
 ```
 
 - Add hosts information  
-
-    vi /etc/hosts
-
-    33.193.255.121 master-lb
-    33.193.255.122 master-01
-    33.193.255.123 master-02
-    33.193.255.124 master-03
-    33.193.255.125 worker-01
-    33.193.255.126 worker-02
-    33.193.255.127 worker-03
-
+```shell
+vi /etc/hosts  
+33.193.255.121 master-lb
+33.193.255.122 master-01
+33.193.255.123 master-02
+33.193.255.124 master-03
+33.193.255.125 worker-01
+33.193.255.126 worker-02
+33.193.255.127 worker-03
+```
 
 - Make Centos8 yum avaliable
 ```shell
@@ -193,7 +192,6 @@ modprobe -- nf_conntrack
 - Create ipvs configure file
 ```shell
 vi /etc/modules-load.d/ipvs.conf  
-
 ip_vs 
 ip_vs_lc 
 ip_vs_wlc 
@@ -224,11 +222,9 @@ EOF
 1. Configure HAproxy and Keepalived 
 
 - On master-lb
-
 ```shell
 yum install keepalived haproxy -y
 vi /etc/haproxy/haproxy.cfg  
-
 global
  maxconn 2000
  ulimit-n 16384
@@ -275,8 +271,7 @@ EOF
 
 ```shell
 yum install keepalived haproxy -y
-vi /etc/keepalived/keepalived.conf (notice should change "mcast_src_ip" on each node)
-
+vi /etc/keepalived/keepalived.conf (notice should change "mcast_src_ip" on each node)  
 ! Configuration File for keepalived
 global_defs {
    router_id LVS_DEVEL
@@ -313,10 +308,8 @@ EOF
 ```
 
 - Health check script on master-01, master-02, master-03
-
 ```shell
 vi /etc/keepalived/check_apiserver.sh  
-
 #!/bin/bash
 err=0
 for k in $(seq 1 3)
@@ -340,14 +333,12 @@ else
    exit 0
 fi
 EOF  
-
 chmod u+x /etc/keepalived/check_apiserver.sh
 ```
 
 2. Configure ssh on master nodes
 
 - Configure ssh without password (on three master nodes)
-
 ```shell
 cd /root
 ssh-keygen -t rsa
@@ -355,7 +346,6 @@ for i in master-02 master-03 worker-01 worker-02 worker-03;do ssh-copy-id $i;don
 ```
 
 - Start HAproxy and Keepalived (on master-lb, master-01, master-02, master-03)
-
 ```shell
 systemctl daemon-reload
 systemctl enable --now haproxy
@@ -365,7 +355,6 @@ systemctl enable --now keepalived
 3. Deploy Etcd cluster
 
 - Download ssl certificate tool (on master-01)
-
 ```shell
 mkdir -p /data/k8s-work  # Create work dir
 cd /data/k8s-work
@@ -379,7 +368,6 @@ mv cfssl-certinfo_linux-amd64 /usr/local/bin/cfssl-certinfo
 ```
 
 - Configure ca request file
-
 ```shell
 vi ca-csr.json  
 
@@ -392,8 +380,8 @@ vi ca-csr.json
   "names": [
     {
       "C": "CN",
-      "ST": "Guangdong",
-      "L": "shenzhen",
+      "ST": "Shanghai",
+      "L": "pudong",
       "O": "k8s",
       "OU": "system"
     }
