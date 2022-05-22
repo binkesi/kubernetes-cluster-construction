@@ -173,6 +173,7 @@ HAproxy and Keepalived installed.
     ```  
 
 4. Load ipvs  
+
     - Install required tools
     ```shell
     yum install ipvsadm ipset sysstat conntrack libseccomp -y
@@ -211,8 +212,7 @@ HAproxy and Keepalived installed.
     ipt_set 
     ipt_rpfilter 
     ipt_REJECT 
-    ipip
-    EOF
+    ipip  
     ```
 
 ### Step 2. Deploy master nodes
@@ -258,47 +258,44 @@ HAproxy and Keepalived installed.
     server  master-01  33.193.255.122:6443 check
     server  master-02  33.193.255.123:6443 check
     server  master-03  33.193.255.124:6443 check
-    EOF
     ```
 
     - On master-01, master-02, master-03
-
     ```shell
     yum install keepalived haproxy -y
     vi /etc/keepalived/keepalived.conf (notice should change "mcast_src_ip" on each node)  
     ! Configuration File for keepalived
     global_defs {
-    router_id LVS_DEVEL
-    script_user root
-    enable_script_security
-    }
-    vrrp_script chk_apiserver {
-    script "/etc/keepalived/check_apiserver.sh"
-    interval 5
-    weight -5
-    fall 2
-    rise 1 # test once success, consider it's alive
-    }
-    vrrp_instance VI_1 {
-    state BACKUP
-    nopreempt
-    interface ens192
-    mcast_src_ip 33.193.255.122
-    virtual_router_id 51
-    priority 100
-    advert_int 2
-    authentication {
-        auth_type PASS
-        auth_pass K8SHA_KA_AUTH
-    }
-    virtual_ipaddress {
-        33.193.255.121
-    }
-    track_script {
-        chk_apiserver
-    }
-    }
-    EOF
+        router_id LVS_DEVEL
+        script_user root
+        enable_script_security
+        }
+        vrrp_script chk_apiserver {
+        script "/etc/keepalived/check_apiserver.sh"
+        interval 5
+        weight -5
+        fall 2
+        rise 1 # test once success, consider it's alive
+        }
+        vrrp_instance VI_1 {
+        state BACKUP
+        nopreempt
+        interface ens192
+        mcast_src_ip 33.193.255.122
+        virtual_router_id 51
+        priority 100
+        advert_int 2
+        authentication {
+            auth_type PASS
+            auth_pass K8SHA_KA_AUTH
+        }
+        virtual_ipaddress {
+            33.193.255.121
+        }
+        track_script {
+            chk_apiserver
+        }
+    } 
     ```
 
     - Health check script on master-01, master-02, master-03
@@ -326,7 +323,7 @@ HAproxy and Keepalived installed.
     else
     exit 0
     fi
-    EOF  
+    EOF     
     chmod u+x /etc/keepalived/check_apiserver.sh
     ```
 
@@ -382,8 +379,7 @@ HAproxy and Keepalived installed.
         "ca": {
                 "expiry": "87600h"
         }
-    }
-    EOF
+    }  
     ```
     
     - Create ca certificate
@@ -411,8 +407,7 @@ HAproxy and Keepalived installed.
                 }
             }
         }
-    }
-    EOF
+    }  
     ``` 
 
     - Create Etcd csr file
@@ -437,8 +432,7 @@ HAproxy and Keepalived installed.
             "O": "k8s",
             "OU": "system"
         }]
-    }
-    EOF
+    }   
     ```
 
     - Generate Etcd certificates
@@ -464,15 +458,13 @@ HAproxy and Keepalived installed.
     ETCD_NAME="etcd1"
     ETCD_DATA_DIR="/var/lib/etcd/default.etcd"
     ETCD_LISTEN_PEER_URLS="https://33.193.255.122:2380"
-    ETCD_LISTEN_CLIENT_URLS="https://33.193.255.122:2379,http://127.0.0.1:2379"
-
+    ETCD_LISTEN_CLIENT_URLS="https://33.193.255.122:2379,http://127.0.0.1:2379"  
     #[Clustering]
     ETCD_INITIAL_ADVERTISE_PEER_URLS="https://33.193.255.122:2380"
     ETCD_ADVERTISE_CLIENT_URLS="https://22.193.255.122:2379"
     ETCD_INITIAL_CLUSTER="etcd1=https://33.193.255.122:2380,etcd2=https://33.193.255.123:2380,etcd3=https://33.193.255.124:2380"
     ETCD_INITIAL_CLUSTER_TOKEN="etcd-cluster"
     ETCD_INITIAL_CLUSTER_STATE="new"  # new -- new cluster, existing -- exist cluster
-    EOF
     ```
 
     - Create service file
@@ -500,8 +492,7 @@ HAproxy and Keepalived installed.
     RestartSec=5
     LimitNOFILE=65536  ​
     [Install]
-    WantedBy=multi-user.target
-    EOF
+    WantedBy=multi-user.target 
     ```
 
     - Create Etcd directory on each master node, copy cert and configure files to each master node(change ip in each config file)
@@ -533,4 +524,3 @@ HAproxy and Keepalived installed.
     --key=/etc/etcd/ssl/etcd-key.pem \
     --endpoints=https://33.193.255.122:2379,https://33.193.255.123:2379,https://33.193.255.124:2379 endpoint health
     ```
-    
