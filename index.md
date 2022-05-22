@@ -66,8 +66,8 @@ vi /etc/fstab
 
 - Add hosts information
 ```shell
-vi /etc/hosts  
-
+vi /etc/hosts
+&nbsp;
 33.193.255.121 master-lb
 33.193.255.122 master-01
 33.193.255.123 master-02
@@ -364,6 +364,43 @@ systemctl enable --now keepalived
 
 3. Deploy Etcd cluster
 
-- Generate ssl certificate
+- Download ssl certificate tool (on master-01)
 
 ```shell
+mkdir -p /data/k8s-work  # Create work dir
+cd /data/k8s-work
+wget https://pkg.cfssl.org/R1.2/cfssl_linux-amd64
+wget https://pkg.cfssl.org/R1.2/cfssljson_linux-amd64
+wget https://pkg.cfssl.org/R1.2/cfssl-certinfo_linux-amd64
+chmod +x cfssl*
+mv cfssl_linux-amd64 /usr/local/bin/cfssl
+mv cfssljson_linux-amd64 /usr/local/bin/cfssljson
+mv cfssl-certinfo_linux-amd64 /usr/local/bin/cfssl-certinfo
+```
+
+- Configure ca request file
+
+```shell
+vi ca-csr.json  
+
+{
+  "CN": "kubernetes",
+  "key": {
+      "algo": "rsa",
+      "size": 2048
+  },
+  "names": [
+    {
+      "C": "CN",
+      "ST": "Guangdong",
+      "L": "shenzhen",
+      "O": "k8s",
+      "OU": "system"
+    }
+  ],
+  "ca": {
+          "expiry": "87600h"
+  }
+}
+EOF
+```
