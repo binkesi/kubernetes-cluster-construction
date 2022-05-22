@@ -219,7 +219,7 @@ HAproxy and Keepalived installed.
 
 1. Configure HAproxy and Keepalived 
 
-    - On master-lb
+    - On master-lb and master-01
     ```shell
     yum install keepalived haproxy -y
     vi /etc/haproxy/haproxy.cfg  
@@ -524,3 +524,434 @@ HAproxy and Keepalived installed.
     --key=/etc/etcd/ssl/etcd-key.pem \
     --endpoints=https://33.193.255.122:2379,https://33.193.255.123:2379,https://33.193.255.124:2379 endpoint health
     ```
+
+5. Deploy k8s master components
+
+    + Deploy api server
+
+        - Download and distribute k8s packages(on master-01)
+        ```shell
+        wget https://dl.k8s.io/v1.22.1/kubernetes-server-linux-amd64.tar.gz
+        tar -xvf kubernetes-server-linux-amd64.tar.gz
+        cd kubernetes/server/bin/
+        cp kube-apiserver kube-controller-manager kube-scheduler kubectl /usr/local/bin/
+        scp   kube-apiserver kube-controller-manager kube-scheduler kubectl master-02:/usr/local/bin/
+        scp   kube-apiserver kube-controller-manager kube-scheduler kubectl master-03:/usr/local/bin/
+        for i in worker-01 worker-02 ;do scp  kubelet kube-proxy $i:/usr/local/bin/;done
+        ```
+
+        - Create work dir on all nodes
+        ```shell
+        mkdir -p /etc/kubernetes/        
+        mkdir -p /etc/kubernetes/ssl     
+        mkdir -p /var/log/kubernetes
+        ```
+
+        - Create api server csr file(on master-01)
+        ```shell
+        cat > kube-apiserver-csr.json << "EOF"
+        {
+            "CN": "kubernetes",
+            "hosts": [
+                "127.0.0.1",
+                "33.193.255.121",
+                "33.193.255.122",
+                "33.193.255.123",
+                "33.193.255.124",
+                "33.193.255.125",
+                "33.193.255.126",
+                "33.193.255.127",
+                "33.193.255.128",
+                "33.193.255.129",
+                "33.193.255.131",
+                "33.193.255.132",
+                "33.193.255.133",
+                "33.193.255.134",
+                "33.193.255.135",
+                "10.96.0.1",
+                "kubernetes",
+                "kubernetes.default",
+                "kubernetes.default.svc",
+                "kubernetes.default.svc.cluster",
+                "kubernetes.default.svc.cluster.local"
+            ],
+            "key": {
+                "algo": "rsa",
+                "size": 2048
+            },
+            "names": [
+                {
+                "C": "CN",
+                "ST": "Shanghai",
+                "L": "pudong",
+                "O": "k8s",
+                "OU": "system"
+                }
+            ]
+        }
+        EOF
+        ```
+
+        - Generate certificate and token for api server(on master-01)
+        ```shell
+        cfssl gencert -ca=ca.pem -ca-key=ca-key.pem -config=ca-config.json -profile=kubernetes kube-apiserver-csr.json | cfssljson -bare kube-apiserver
+        cat > token.csv << EOF
+        $(head -c 16 /dev/urandom | od -An -t x | tr -d ' '),kubelet-bootstrap,10001,"system:kubelet-bootstrap"
+        EOF
+        ```
+
+        - Create api server configure file
+        ```shell
+        cat > kube-apiserver.conf << "EOF"
+        KUBE_APISERVER_OPTS="--enable-admission-plugins=NamespaceLifecycle,NodeRestriction,LimitRanger,ServiceAccount,DefaultStorageClass,ResourceQuota \
+        --anonymous-auth=false \
+        --bind-address=33.193.255.122 \
+        --secure-port=6443 \
+        --advertise-address=33.193.255.122 \
+        --insecure-port=0 \
+        --authorization-mode=Node,RBAC \
+        --runtime-config=api/all=true \
+        --enable-bootstrap-token-auth \
+        --service-cluster-ip-range=10.96.0.0/16 \
+        --token-auth-file=/etc/kubernetes/token.csv \
+        --service-node-port-range=30000-50000 \
+        --tls-cert-file=/etc/kubernetes/ssl/kube-apiserver.pem  \
+        --tls-private-key-file=/etc/kubernetes/ssl/kube-apiserver-key.pem \
+        --client-ca-file=/etc/kubernetes/ssl/ca.pem \
+        --kubelet-client-certificate=/etc/kubernetes/ssl/kube-apiserver.pem \
+        --kubelet-client-key=/etc/kubernetes/ssl/kube-apiserver-key.pem \
+        --service-account-key-file=/etc/kubernetes/ssl/ca-key.pem \
+        --service-account-signing-key-file=/etc/kubernetes/ssl/ca-key.pem  \
+        --service-account-issuer=api \
+        --etcd-cafile=/etc/etcd/ssl/ca.pem \
+        --etcd-certfile=/etc/etcd/ssl/etcd.pem \
+        --etcd-keyfile=/etc/etcd/ssl/etcd-key.pem \
+        --etcd-servers=https://33.193.255.122:2379,https://33.193.255.123:2379,https://33.193.255.124:2379 \
+        --enable-swagger-ui=true \
+        --allow-privileged=true \
+        --apiserver-count=3 \
+        --audit-log-maxage=30 \
+        --audit-log-maxbackup=3 \
+        --audit-log-maxsize=100 \
+        --audit-log-path=/var/log/kube-apiserver-audit.log \
+        --event-ttl=1h \
+        --alsologtostderr=true \
+        --logtostderr=false \
+        --log-dir=/var/log/kubernetes \
+        --v=4"
+        EOF
+        ```
+
+        - Create api server service file
+        ```shell
+        cat > kube-apiserver.service << "EOF"
+        [Unit]
+        Description=Kubernetes API Server
+        Documentation=https://github.com/kubernetes/kubernetes
+        After=etcd.service
+        Wants=etcd.service  
+        [Service]
+        EnvironmentFile=-/etc/kubernetes/kube-apiserver.conf
+        ExecStart=/usr/local/bin/kube-apiserver $KUBE_APISERVER_OPTS
+        Restart=on-failure
+        RestartSec=5
+        Type=notify
+        LimitNOFILE=65536  
+        [Install]
+        WantedBy=multi-user.target
+        EOF
+        ```
+
+        - Sync certificate and api configure files to each master nodes and modify IP in config files
+        ```shell
+        cp ca*.pem /etc/kubernetes/ssl/
+        cp kube-apiserver*.pem /etc/kubernetes/ssl/
+        cp token.csv /etc/kubernetes/
+        cp kube-apiserver.conf /etc/kubernetes/ 
+        cp kube-apiserver.service /usr/lib/systemd/system/
+        scp   token.csv master-02:/etc/kubernetes/
+        scp   token.csv master-03:/etc/kubernetes/
+        scp   kube-apiserver*.pem master-02:/etc/kubernetes/ssl/
+        scp   kube-apiserver*.pem master-03:/etc/kubernetes/ssl/
+        scp   ca*.pem master-02:/etc/kubernetes/ssl/
+        scp   ca*.pem master-03:/etc/kubernetes/ssl/
+        scp   kube-apiserver.conf master-02:/etc/kubernetes/
+        scp   kube-apiserver.conf master-03:/etc/kubernetes/
+        scp   kube-apiserver.service master-02:/usr/lib/systemd/system/
+        scp   kube-apiserver.service master-03:/usr/lib/systemd/system/
+        vim kube-apiserver.conf
+        ```
+
+        - Start api server on each master nodes
+        ```shell
+        systemctl daemon-reload
+        systemctl enable --now kube-apiserver
+        systemctl status kube-apiserver
+        ```
+
+        - Create admin csr file for kubelet
+        ```shell
+        cat > admin-csr.json << "EOF"
+        {
+            "CN": "admin",
+            "hosts": [],
+            "key": {
+                "algo": "rsa",
+                "size": 2048
+            },
+            "names": [
+                {
+                "C": "CN",
+                "ST": "Shanghai",
+                "L": "pudong",
+                "O": "system:masters",             
+                "OU": "system"
+                }
+            ]
+        }
+        EOF 
+        ``` 
+
+    + Deploy kubectl
+        
+        - Generate certificate
+        ```shell
+        cfssl gencert -ca=ca.pem -ca-key=ca-key.pem -config=ca-config.json -profile=kubernetes admin-csr.json | cfssljson -bare admin
+        cp admin*.pem /etc/kubernetes/ssl/
+        ``` 
+
+        - Configure kube config
+        ```shell
+        kubectl config set-cluster kubernetes --certificate-authority=ca.pem --embed-certs=true --server=https://33.193.255.121:16443 --kubeconfig=kube.config
+        kubectl config set-credentials admin --client-certificate=admin.pem --client-key=admin-key.pem --embed-certs=true --kubeconfig=kube.config
+        kubectl config set-context kubernetes --cluster=kubernetes --user=admin --kubeconfig=kube.config
+        kubectl config use-context kubernetes --kubeconfig=kube.config
+        mkdir ~/.kube
+        cp kube.config ~/.kube/config
+        kubectl create clusterrolebinding kube-apiserver:kubelet-apis --clusterrole=system:kubelet-api-admin --user kubernetes --kubeconfig=~/.kube/config
+        ```
+
+        - Check cluster status and scp kubectl config file to other master nodes
+        ```shell
+        export KUBECONFIG=$HOME/.kube/config
+        kubectl cluster-info
+        kubectl get componentstatuses
+        kubectl get all --all-namespaces
+        scp    /root/.kube/config master-02:/root/.kube/
+        scp    /root/.kube/config master-03:/root/.kube/
+        ```
+
+        - Configure kubectl task completion
+        ```shell
+        yum install -y bash-completion
+        source /usr/share/bash-completion/bash_completion
+        source <(kubectl completion bash)
+        kubectl completion bash > ~/.kube/completion.bash.inc
+        source '/root/.kube/completion.bash.inc'  
+        source $HOME/.bash_profile
+        ```
+
+    + Deploy kube-controller-manager  
+
+        - Create csr file
+        ```shell
+        cat > kube-controller-manager-csr.json << "EOF"
+        {
+            "CN": "system:kube-controller-manager",
+            "key": {
+                "algo": "rsa",
+                "size": 2048
+            },
+            "hosts": [
+                "127.0.0.1",
+                "33.193.255.122",
+                "33.193.255.123",
+                "33.193.255.124"
+            ],
+            "names": [
+                {
+                    "C": "CN",
+                    "ST": "Shanghai",
+                    "L": "pudong",
+                    "O": "system:kube-controller-manager",
+                    "OU": "system"
+                }
+            ]
+        }
+        EOF
+        ```
+
+        - Generate certificate file
+        ```shell
+        cfssl gencert -ca=ca.pem -ca-key=ca-key.pem -config=ca-config.json -profile=kubernetes kube-controller-manager-csr.json | cfssljson -bare kube-controller-manager
+        ls kube-controller-manager*.pem
+        ```
+
+        - Generate kube-controller-manager.kubeconfig
+        ```shell
+        kubectl config set-cluster kubernetes --certificate-authority=ca.pem --embed-certs=true --server=https://33.193.255.121:16443 --kubeconfig=kube-controller-manager.kubeconfig
+        kubectl config set-credentials system:kube-controller-manager --client-certificate=kube-controller-manager.pem --client-key=kube-controller-manager-key.pem --embed-certs=true --kubeconfig=kube-controller-manager.kubeconfig
+        kubectl config set-context system:kube-controller-manager --cluster=kubernetes --user=system:kube-controller-manager --kubeconfig=kube-controller-manager.kubeconfig
+        kubectl config use-context system:kube-controller-manager --kubeconfig=kube-controller-manager.kubeconfig
+        ```
+
+        - Create kube-controller-manager.conf
+        ```shell
+        cat > kube-controller-manager.conf << "EOF"
+        KUBE_CONTROLLER_MANAGER_OPTS="--port=0 \
+        --secure-port=10257 \
+        --bind-address=127.0.0.1 \
+        --kubeconfig=/etc/kubernetes/kube-controller-manager.kubeconfig \
+        --service-cluster-ip-range=10.96.0.0/16 \
+        --cluster-name=kubernetes \
+        --cluster-signing-cert-file=/etc/kubernetes/ssl/ca.pem \
+        --cluster-signing-key-file=/etc/kubernetes/ssl/ca-key.pem \
+        --allocate-node-cidrs=true \
+        --cluster-cidr=172.168.0.0/16 \
+        --experimental-cluster-signing-duration=87600h \
+        --root-ca-file=/etc/kubernetes/ssl/ca.pem \
+        --service-account-private-key-file=/etc/kubernetes/ssl/ca-key.pem \
+        --leader-elect=true \
+        --feature-gates=RotateKubeletServerCertificate=true \
+        --controllers=*,bootstrapsigner,tokencleaner \
+        --horizontal-pod-autoscaler-sync-period=10s \
+        --tls-cert-file=/etc/kubernetes/ssl/kube-controller-manager.pem \
+        --tls-private-key-file=/etc/kubernetes/ssl/kube-controller-manager-key.pem \
+        --use-service-account-credentials=true \
+        --alsologtostderr=true \
+        --logtostderr=false \
+        --log-dir=/var/log/kubernetes \
+        --v=2"
+        EOF   
+        ```
+
+        - Create kube-controller-manager.service
+        ```shell
+        cat > kube-controller-manager.service << "EOF"
+        [Unit]
+        Description=Kubernetes Controller Manager
+        Documentation=https://github.com/kubernetes/kubernetes​  
+        [Service]
+        EnvironmentFile=-/etc/kubernetes/kube-controller-manager.conf
+        ExecStart=/usr/local/bin/kube-controller-manager $KUBE_CONTROLLER_MANAGER_OPTS
+        Restart=on-failure
+        RestartSec=5  
+        [Install]
+        WantedBy=multi-user.target
+        EOF 
+        ```
+
+        - Copy files to each master nodes
+        ```shell
+        cp kube-controller-manager*.pem /etc/kubernetes/ssl/
+        cp kube-controller-manager.kubeconfig /etc/kubernetes/
+        cp kube-controller-manager.conf /etc/kubernetes/
+        cp kube-controller-manager.service /usr/lib/systemd/system/
+        scp  kube-controller-manager*.pem master-02:/etc/kubernetes/ssl/
+        scp  kube-controller-manager*.pem master-03:/etc/kubernetes/ssl/
+        scp  kube-controller-manager.kubeconfig kube-controller-manager.conf master-02:/etc/kubernetes/
+        scp  kube-controller-manager.kubeconfig kube-controller-manager.conf master-03:/etc/kubernetes/
+        scp  kube-controller-manager.service master-02:/usr/lib/systemd/system/
+        scp  kube-controller-manager.service master-03:/usr/lib/systemd/system/
+        ```
+
+        - Start kube controller manager service
+        ```shell
+        systemctl daemon-reload 
+        systemctl enable --now kube-controller-manager
+        systemctl status kube-controller-manager  
+        ```
+
+    + Deploy kube scheduler
+
+        - Create csr file
+        ```shell
+        cat > kube-scheduler-csr.json << "EOF"
+        {
+            "CN": "system:kube-scheduler",
+            "hosts": [
+            "127.0.0.1",
+            "33.193.255.122",
+            "33.193.255.123",
+            "33.193.255.124"
+            ],
+            "key": {
+                "algo": "rsa",
+                "size": 2048
+            },
+            "names": [
+            {
+                "C": "CN",
+                "ST": "Shanghai",
+                "L": "pudong",
+                "O": "system:kube-scheduler",
+                "OU": "system"
+            }
+            ]
+        }
+        EOF 
+        ```  
+
+        - Generate certificate
+        ```shell
+        cfssl gencert -ca=ca.pem -ca-key=ca-key.pem -config=ca-config.json -profile=kubernetes kube-scheduler-csr.json | cfssljson -bare kube-schedule
+        ls kube-scheduler*.pem
+        ```
+
+        - Generate kubeconfig for kube-scheduler
+        ```shell
+        kubectl config set-cluster kubernetes --certificate-authority=ca.pem --embed-certs=true --server=https://33.193.255.121:16443 --kubeconfig=kube-scheduler.kubeconfig
+        kubectl config set-credentials system:kube-scheduler --client-certificate=kube-scheduler.pem --client-key=kube-scheduler-key.pem --embed-certs=true --kubeconfig=kube-scheduler.kubeconfig
+        kubectl config set-context system:kube-scheduler --cluster=kubernetes --user=system:kube-scheduler --kubeconfig=kube-scheduler.kubeconfig
+        kubectl config use-context system:kube-scheduler --kubeconfig=kube-scheduler.kubeconfig
+        ```
+
+        - Create kube-scheduler.conf
+        ```shell
+        cat > kube-scheduler.conf << "EOF"
+        KUBE_SCHEDULER_OPTS="--address=127.0.0.1 \
+        --kubeconfig=/etc/kubernetes/kube-scheduler.kubeconfig \
+        --leader-elect=true \
+        --alsologtostderr=true \
+        --logtostderr=false \
+        --log-dir=/var/log/kubernetes \
+        --v=2"
+        EOF
+        ```
+
+        - Create kube-scheduler.service
+        ```shell
+        cat > kube-scheduler.service << "EOF"
+        [Unit]
+        Description=Kubernetes Scheduler
+        Documentation=https://github.com/kubernetes/kubernetes
+        [Service]
+        EnvironmentFile=-/etc/kubernetes/kube-scheduler.conf
+        ExecStart=/usr/local/bin/kube-scheduler $KUBE_SCHEDULER_OPTS
+        Restart=on-failure
+        RestartSec=5
+        [Install]
+        WantedBy=multi-user.target
+        EOF
+        ```
+
+        - Copy files to each master node
+        ```shell
+        cp kube-scheduler*.pem /etc/kubernetes/ssl/
+        cp kube-scheduler.kubeconfig /etc/kubernetes/
+        cp kube-scheduler.conf /etc/kubernetes/
+        cp kube-scheduler.service /usr/lib/systemd/system/
+        scp  kube-scheduler*.pem master-02:/etc/kubernetes/ssl/
+        scp  kube-scheduler*.pem master-03:/etc/kubernetes/ssl/
+        scp  kube-scheduler.kubeconfig kube-scheduler.conf master-02:/etc/kubernetes/
+        scp  kube-scheduler.kubeconfig kube-scheduler.conf master-03:/etc/kubernetes/
+        scp  kube-scheduler.service master-02:/usr/lib/systemd/system/
+        scp  kube-scheduler.service master-03:/usr/lib/systemd/system/
+        ```
+
+        - Start kube-scheduler service
+        ```shell
+        systemctl daemon-reload
+        systemctl enable --now kube-scheduler
+        systemctl status kube-scheduler
+        ```
