@@ -46,9 +46,8 @@ HAproxy and Keepalived installed.
 
 ### Step 1. Prepare base VM
 
-1. Set up a base Centos8 VM for clone which can access Internet. (deploy ova template on Vcenter)
-2. Do some system service configuration
-
+1. Set up a base Centos8 VM for clone which can access Internet. (deploy ova template on Vcenter)  
+2. Do some system service configuration  
 - Disable firewall and selinux
 ```shell
 systemctl stop firewalld
@@ -89,10 +88,8 @@ sudo dnf distro-sync
 yum install chrony -y
 systemctl enable chronyd
 systemctl start chronyd
-```
-
-3. Upgrade linux kernel
-
+```  
+3. Upgrade linux kernel  
 - Import elrepo yum resource
 ```shell
 rpm --import https://www.elrepo.org/RPM-GPG-KEY-elrepo.org
@@ -171,10 +168,8 @@ net.core.somaxconn = 16384
 EOF  
 sysctl --system
 yum install wget jq psmisc vim net-tools telnet yum-utils device-mapper-persistent-data lvm2 git lrzsz -y
-```
-
-4. Load ipvs
-
+```  
+4. Load ipvs  
 - Install required tools
 ```shell
 yum install ipvsadm ipset sysstat conntrack libseccomp -y
