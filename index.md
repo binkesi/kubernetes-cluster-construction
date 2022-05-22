@@ -66,7 +66,8 @@ vi /etc/fstab
 
 - Add hosts information
 ```shell
-vi /etc/hosts
+vi /etc/hosts  
+
 33.193.255.121 master-lb
 33.193.255.122 master-01
 33.193.255.123 master-02
@@ -144,7 +145,8 @@ echo "DefaultLimitNPROC=1024000" >> /etc/systemd/system.conf
 
 - Optimize kernel for k8s
 ```shell
-vi /etc/sysctl.d/k8s.conf
+vi /etc/sysctl.d/k8s.conf  
+
 net.ipv4.ip_forward = 1
 net.bridge.bridge-nf-call-iptables = 1
 net.bridge.bridge-nf-call-ip6tables = 1
@@ -168,7 +170,8 @@ net.ipv4.ip_conntrack_max = 131072
 net.ipv4.tcp_max_syn_backlog = 16384
 net.ipv4.tcp_timestamps = 0
 net.core.somaxconn = 16384
-EOF
+EOF  
+
 sysctl --system
 yum install wget jq psmisc vim net-tools telnet yum-utils device-mapper-persistent-data lvm2 git lrzsz -y
 ```
@@ -191,7 +194,8 @@ modprobe -- nf_conntrack
 
 - Create ipvs configure file
 ```shell
-vi /etc/modules-load.d/ipvs.conf
+vi /etc/modules-load.d/ipvs.conf  
+
 ip_vs 
 ip_vs_lc 
 ip_vs_wlc 
@@ -219,7 +223,9 @@ EOF
 
 ### Step 2. Deploy master nodes
 
-1. Configure HAproxy and Keepalived (on master-lb)
+1. Configure HAproxy and Keepalived 
+
+- On master-lb
 
 ```shell
 yum install keepalived haproxy -y
@@ -246,6 +252,7 @@ frontend monitor-in
  mode http
  option httplog
  monitor-uri /monitor  
+
 frontend k8s-master
  bind 0.0.0.0:16443
  bind 127.0.0.1:16443
@@ -253,6 +260,7 @@ frontend k8s-master
  option tcplog
  tcp-request inspect-delay 5s
  default_backend k8s-master  
+
 backend k8s-master
  mode tcp
  option tcplog
@@ -263,4 +271,95 @@ backend k8s-master
  server  master-02  33.193.255.123:6443 check
  server  master-03  33.193.255.124:6443 check
 EOF
+```
+
+- On master-01, master-02, master-03
+
+```shell
+yum install keepalived haproxy -y
+vi /etc/keepalived/keepalived.conf (notice should change "mcast_src_ip" on each node)
+
+! Configuration File for keepalived
+global_defs {
+   router_id LVS_DEVEL
+   script_user root
+   enable_script_security
+}
+vrrp_script chk_apiserver {
+   script "/etc/keepalived/check_apiserver.sh"
+   interval 5
+   weight -5
+   fall 2
+   rise 1 # test once success, consider it's alive
+}
+vrrp_instance VI_1 {
+   state BACKUP
+   nopreempt
+   interface ens192
+   mcast_src_ip 33.193.255.122
+   virtual_router_id 51
+   priority 100
+   advert_int 2
+   authentication {
+       auth_type PASS
+       auth_pass K8SHA_KA_AUTH
+   }
+   virtual_ipaddress {
+       33.193.255.121
+   }
+   track_script {
+      chk_apiserver
+   }
+}
+EOF
+```
+
+- Health check script on master-01, master-02, master-03
+
+```shell
+vi /etc/keepalived/check_apiserver.sh  
+
+#!/bin/bash
+err=0
+for k in $(seq 1 3)
+do
+   check_code=$(pgrep haproxy)
+   if [[ $check_code == "" ]]; then
+       err=$(expr $err + 1)
+       sleep 1
+       continue
+   else
+       err=0
+       break
+   fi
+done
+​
+if [[ $err != "0" ]]; then
+   echo "systemctl stop keepalived"
+   /usr/bin/systemctl stop keepalived
+   exit 1
+else
+   exit 0
+fi
+EOF  
+
+chmod u+x /etc/keepalived/check_apiserver.sh
+```
+
+2. Configure ssh on master nodes
+
+- Configure ssh without password (on three master nodes)
+
+```shell
+cd /root
+ssh-keygen -t rsa
+for i in master-02 master-03 worker-01 worker-02 worker-03;do ssh-copy-id $i;done
+```
+
+- Start HAproxy and Keepalived (on master-lb, master-01, master-02, master-03)
+
+```shell
+systemctl daemon-reload
+systemctl enable --now haproxy
+systemctl enable --now keepalived
 ```
