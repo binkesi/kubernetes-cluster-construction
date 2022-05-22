@@ -223,12 +223,14 @@ EOF
 
 ```shell
 yum install keepalived haproxy -y
-vi /etc/haproxy/haproxy.cfg
+vi /etc/haproxy/haproxy.cfg  
+
 global
  maxconn 2000
  ulimit-n 16384
  log 127.0.0.1 local0 err
  stats timeout 30s  
+
 defaults
  log global
  mode http
@@ -238,6 +240,7 @@ defaults
  timeout server 50000
  timeout http-request 15s
  timeout http-keep-alive 15s  
+
 frontend monitor-in
  bind *:33305
  mode http
