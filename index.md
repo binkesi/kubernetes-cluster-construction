@@ -219,7 +219,7 @@ HAproxy and Keepalived installed.
 
 1. Configure HAproxy and Keepalived 
 
-    - On master-lb and master-01
+    - On master-lb and master-01, master-02, master-03
     ```shell
     yum install keepalived haproxy -y
     vi /etc/haproxy/haproxy.cfg  
