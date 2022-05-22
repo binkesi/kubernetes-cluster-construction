@@ -64,10 +64,10 @@ vi /etc/fstab
 #/dev/mapper/centos-swap swap                    swap    defaults        0 0
 ```
 
-- Add hosts information
+- Add hosts information  
 
     vi /etc/hosts
-    
+
     33.193.255.121 master-lb
     33.193.255.122 master-01
     33.193.255.123 master-02
