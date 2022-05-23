@@ -1260,7 +1260,7 @@ HAproxy and Keepalived installed.
         ```
 
         - Create coredns.yaml 
-        ```shell
+        ```yaml
         cat >  coredns.yaml << "EOF"
         apiVersion: v1
         kind: ServiceAccount
@@ -1472,7 +1472,7 @@ HAproxy and Keepalived installed.
     + Deploy nginx template to verify
 
         - Create nginx template
-        ```shell
+        ```yaml
         cat >  nginx.yaml  << "EOF"
         ---
         apiVersion: v1
