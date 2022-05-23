@@ -537,7 +537,7 @@ HAproxy and Keepalived installed.
         cp kube-apiserver kube-controller-manager kube-scheduler kubectl /usr/local/bin/
         scp   kube-apiserver kube-controller-manager kube-scheduler kubectl master-02:/usr/local/bin/
         scp   kube-apiserver kube-controller-manager kube-scheduler kubectl master-03:/usr/local/bin/
-        for i in worker-01 worker-02 ;do scp  kubelet kube-proxy $i:/usr/local/bin/;done
+        for i in worker-01 worker-02 worker-03 ;do scp  kubelet kube-proxy $i:/usr/local/bin/;done
         ```
 
         - Create work dir on all nodes
@@ -955,3 +955,297 @@ HAproxy and Keepalived installed.
         systemctl enable --now kube-scheduler
         systemctl status kube-scheduler
         ```
+
+6. Deploy worker nodes components
+
+    + Configure docker daemon file
+    ```shell
+    cat <<EOF | sudo tee /etc/docker/daemon.json
+    {
+    "exec-opts": ["native.cgroupdriver=systemd"],
+    "log-driver": "json-file",
+    "log-opts": {
+        "max-size": "100m"
+    },
+    "storage-driver": "overlay2",
+    "storage-opts": [
+        "overlay2.override_kernel_check=true"
+    ],
+    "registry-mirrors": ["https://nadmjhbw.mirror.aliyuncs.com"]
+    }
+    EOF
+    systemctl daemon-reload
+    systemctl restart docker 
+    ```
+
+    + Deploy kubelet
+
+        - Generate config files(on master-01)
+        ```shell
+        BOOTSTRAP_TOKEN=$(awk -F "," '{print $1}' /etc/kubernetes/token.csv)
+        kubectl config set-cluster kubernetes --certificate-authority=ca.pem --embed-certs=true --server=https://33.193.255.121:16443 --kubeconfig=kubelet-bootstrap.kubeconfig
+        kubectl config set-credentials kubelet-bootstrap --token=${BOOTSTRAP_TOKEN} --kubeconfig=kubelet-bootstrap.kubeconfig
+        kubectl config set-context default --cluster=kubernetes --user=kubelet-bootstrap --kubeconfig=kubelet-bootstrap.kubeconfig
+        kubectl config use-context default --kubeconfig=kubelet-bootstrap.kubeconfig
+        kubectl create clusterrolebinding kubelet-bootstrap --clusterrole=system:node-bootstrapper --user=kubelet-bootstrap --kubeconfig=/root/.kube/config
+        ```
+
+        - Create json config file(on master-01)
+        ```shell
+        cat > kubelet.json << "EOF"
+        {
+        "kind": "KubeletConfiguration",
+        "apiVersion": "kubelet.config.k8s.io/v1beta1",
+        "authentication": {
+            "x509": {
+            "clientCAFile": "/etc/kubernetes/ssl/ca.pem"
+            },
+            "webhook": {
+            "enabled": true,
+            "cacheTTL": "2m0s"
+            },
+            "anonymous": {
+            "enabled": false
+            }
+        },
+        "authorization": {
+            "mode": "Webhook",
+            "webhook": {
+            "cacheAuthorizedTTL": "5m0s",
+            "cacheUnauthorizedTTL": "30s"
+            }
+        },
+        "address": "33.193.255.125",
+        "port": 10250,
+        "readOnlyPort": 10255,
+        "cgroupDriver": "systemd",                    
+        "hairpinMode": "promiscuous-bridge",
+        "serializeImagePulls": false,
+        "clusterDomain": "cluster.local.",
+        "clusterDNS": ["10.96.0.2"]
+        }
+        EOF
+        ```
+
+        - Create service config file(on master-01)
+        ```shell
+        cat > kubelet.service << "EOF"
+        [Unit]
+        Description=Kubernetes Kubelet
+        Documentation=https://github.com/kubernetes/kubernetes
+        After=docker.service
+        Requires=docker.service  
+        [Service]
+        WorkingDirectory=/var/lib/kubelet
+        ExecStart=/usr/local/bin/kubelet \
+        --bootstrap-kubeconfig=/etc/kubernetes/kubelet-bootstrap.kubeconfig \
+        --cert-dir=/etc/kubernetes/ssl \
+        --kubeconfig=/etc/kubernetes/kubelet.kubeconfig \
+        --config=/etc/kubernetes/kubelet.json \
+        --network-plugin=cni \
+        --rotate-certificates \
+        --pod-infra-container-image=registry.aliyuncs.com/google_containers/pause:3.2 \
+        --alsologtostderr=true \
+        --logtostderr=false \
+        --log-dir=/var/log/kubernetes \
+        --v=2
+        Restart=on-failure
+        RestartSec=5​  
+        [Install]
+        WantedBy=multi-user.target
+        EOF
+        ```
+
+        - Copy files to each worker nodes
+        ```shell
+        cp kubelet-bootstrap.kubeconfig /etc/kubernetes/
+        cp kubelet.json /etc/kubernetes/
+        cp kubelet.service /usr/lib/systemd/system/
+        for i in  worker-01 worker-02 worker-03 ;do scp  kubelet-bootstrap.kubeconfig kubelet.json $i:/etc/kubernetes/;done
+        for i in  worker-01 worker-02 worker-03 ;do scp  ca.pem $i:/etc/kubernetes/ssl/;done
+        for i in worker-01 worker-02 worker-03 ;do scp  kubelet.service $i:/usr/lib/systemd/system/;done
+        ```
+
+        - Create directory for kubelet log and enable kubelet(on three worker nodes)
+        ```shell
+        mkdir -p /var/lib/kubelet
+        mkdir -p /var/log/kubernetes
+        systemctl daemon-reload
+        systemctl enable --now kubelet
+        systemctl status kubelet
+        ```
+
+        - Approve bootstrap request on master-01 node
+        ```shell
+        kubectl get csr | grep Pending | awk '{print $1}' | xargs kubectl certificate approve
+        kubectl get nodes
+        ```
+
+    + Deploy kube-proxy
+
+        - Create csr file(on master-01)
+        ```shell
+        cat > kube-proxy-csr.json << "EOF"
+        {
+        "CN": "system:kube-proxy",
+        "key": {
+            "algo": "rsa",
+            "size": 2048
+        },
+        "names": [
+            {
+            "C": "CN",
+            "ST": "Shanghai",
+            "L": "pudong",
+            "O": "k8s",
+            "OU": "system"
+            }
+        ]
+        }
+        EOF  
+        ```
+
+        - Generate certificates
+        ```shell
+        cfssl gencert -ca=ca.pem -ca-key=ca-key.pem -config=ca-config.json -profile=kubernetes kube-proxy-csr.json | cfssljson -bare kube-proxy
+        ```
+
+        - Create kube-config file
+        ```shell
+        kubectl config set-cluster kubernetes --certificate-authority=ca.pem --embed-certs=true --server=https://33.193.255.121:16443 --kubeconfig=kube-proxy.kubeconfig  
+        kubectl config set-credentials kube-proxy --client-certificate=kube-proxy.pem --client-key=kube-proxy-key.pem --embed-certs=true --kubeconfig=kube-proxy.kubeconfig
+        kubectl config set-context default --cluster=kubernetes --user=kube-proxy --kubeconfig=kube-proxy.kubeconfig
+        kubectl config use-context default --kubeconfig=kube-proxy.kubeconfig
+        ```
+
+        - Create kube-proxy template file
+        ```shell
+        cat > kube-proxy.yaml << "EOF"
+        apiVersion: kubeproxy.config.k8s.io/v1alpha1
+        bindAddress: 33.193.255.125
+        clientConnection:
+        kubeconfig: /etc/kubernetes/kube-proxy.kubeconfig
+        clusterCIDR: 172.168.0.0/12
+        healthzBindAddress: 33.193.255.125:10256
+        kind: KubeProxyConfiguration
+        metricsBindAddress: 33.193.255.125:10249
+        mode: "ipvs"
+        EOF
+        ```
+
+        - Create kube-proxy service file
+        ```shell
+        cat >  kube-proxy.service << "EOF"
+        [Unit]
+        Description=Kubernetes Kube-Proxy Server
+        Documentation=https://github.com/kubernetes/kubernetes
+        After=network.target  ​
+        [Service]
+        WorkingDirectory=/var/lib/kube-proxy
+        ExecStart=/usr/local/bin/kube-proxy \
+        --config=/etc/kubernetes/kube-proxy.yaml \
+        --alsologtostderr=true \
+        --logtostderr=false \
+        --log-dir=/var/log/kubernetes \
+        --v=2
+        Restart=on-failure
+        RestartSec=5
+        LimitNOFILE=65536  
+        [Install]
+        WantedBy=multi-user.target
+        EOF
+        ```
+
+        - Copy files to each worker nodes and modify ip to specific node
+        ```shell
+        cp kube-proxy*.pem /etc/kubernetes/ssl/
+        cp kube-proxy.kubeconfig kube-proxy.yaml /etc/kubernetes/
+        cp kube-proxy.service /usr/lib/systemd/system/    
+        for i in worker-01 worker-02 worker-03;do scp  kube-proxy.kubeconfig kube-proxy.yaml $i:/etc/kubernetes/;done
+        for i in worker-01 worker-02 worker-03;do scp  kube-proxy.service $i:/usr/lib/systemd/system/;done 
+        vim /etc/kubernetes/kube-proxy.yaml
+        ```
+
+        - Start kube-proxy
+        ```shell
+        mkdir -p /var/lib/kube-proxy
+        systemctl daemon-reload
+        systemctl enable --now kube-proxy
+        systemctl status kube-proxy  
+        ```
+
+7. Deploy network components
+
+    + Deploy Calico
+
+        - Install Calico(on master-01 node)
+        ```shell
+        wget https://docs.projectcalico.org/v3.19/manifests/calico.yaml
+        ```
+
+        - Download Calico packages and load docker images
+        ```shell
+        wget https://github.com/projectcalico/calico/releases/download/v3.19.0/release-v3.19.0.tgz
+        tar -xzvf release-v3.19.0.tgz
+        cd release-v3.19.0/images
+        docker load < calico-cni.tar
+        docker load < calico-kube-controllers.tar
+        docker load < calico-node.tar
+        docker load < calico-pod2daemon-flexvol.tar
+        ```
+
+        - Push images to aliyun repository
+        ```shell
+        docker login --username=binkesi1234 registry.cn-shanghai.aliyuncs.com
+        docker tag calico/node:v3.19.0 registry.cn-shanghai.aliyuncs.com/binkesi/calico-node:v3.19.0
+        docker push registry.cn-shanghai.aliyuncs.com/binkesi/calico-node:v3.19.0
+        docker tag calico/pod2daemon-flexvol:v3.19.0 registry.cn-shanghai.aliyuncs.com/binkesi/calico-pod2daemon-flexvol:v3.19.0
+        docker push registry.cn-shanghai.aliyuncs.com/binkesi/calico-pod2daemon-flexvol:v3.19.0
+        docker tag calico/cni:v3.19.0 registry.cn-shanghai.aliyuncs.com/binkesi/calico-cni:v3.19.0
+        docker push registry.cn-shanghai.aliyuncs.com/binkesi/calico-cni:v3.19.0
+        docker tag calico/kube-controllers:v3.19.0 registry.cn-shanghai.aliyuncs.com/binkesi/calico-kube-controllers:v3.19.0
+        docker push registry.cn-shanghai.aliyuncs.com/binkesi/calico-kube-controllers:v3.19.0
+        ```
+
+        - Modify calico.yaml and change repository to aliyun url
+        ```shell
+        docker.io/calico/kube-controllers:v3.19.0 -> registry.cn-shanghai.aliyuncs.com/binkesi/calico-kube-controllers:v3.19.0
+        ```
+
+        - Generate Secret for docker login and use this secret to pull docker image
+        ```shell
+        kubectl create secret generic aliyuncred \
+        --from-file=.dockerconfigjson=/root/.docker/config.json \
+        --type=kubernetes.io/dockerconfigjson 
+        --namespace=kube-system
+        ```  
+        ```yaml
+        apiVersion: apps/v1
+        kind: Deployment
+        metadata:
+        name: calico-kube-controllers
+        namespace: kube-system
+        labels:
+            k8s-app: calico-kube-controllers
+        spec:
+        replicas: 1
+        selector:
+            matchLabels:
+            k8s-app: calico-kube-controllers
+        strategy:
+            type: Recreate
+        template:
+            metadata:
+            name: calico-kube-controllers
+            namespace: kube-system
+            labels:
+                k8s-app: calico-kube-controllers
+            spec:
+            imagePullSecrets:
+                - name: aliyuncred
+        ```
+
+        - Create calico pods
+        ```shell
+        kubectl apply -f calico.yaml 
+        ```                     
